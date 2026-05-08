@@ -1,0 +1,21 @@
+[package]
+name = "absolutehotas-configurator"
+version = "1.0.0-rc.1"
+description = "AbsoluteHOTAS INI configurator"
+authors = ["AbsoluteHOTAS"]
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/SultanDesync/AbsoluteHOTAS-Configurator"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+windows = { version = "0.61", features = [
+    "Win32_Devices_HumanInterfaceDevice",
+    "Win32_Foundation",
+    "Win32_System_LibraryLoader"
+] }

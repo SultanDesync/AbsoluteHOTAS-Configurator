@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">AbsoluteHOTAS Configurator</title>
+  <desc id="desc">A cockpit style AbsoluteHOTAS badge with a throttle silhouette.</desc>
+  <defs>
+    <linearGradient id="panel" x1="16" y1="14" x2="112" y2="118" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#10242b"/>
+      <stop offset="0.52" stop-color="#17252a"/>
+      <stop offset="1" stop-color="#09171d"/>
+    </linearGradient>
+    <linearGradient id="cream" x1="32" y1="20" x2="96" y2="112" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f0eee0"/>
+      <stop offset="1" stop-color="#b9b59d"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="18" fill="#07151b"/>
+  <rect x="10" y="10" width="108" height="108" rx="14" fill="url(#panel)" stroke="#006b82" stroke-width="4"/>
+  <path d="M24 48c9-20 27-30 47-27 14 2 25 9 33 20" fill="none" stroke="#dcdcd1" stroke-width="5" stroke-linecap="round"/>
+  <path d="M20 96h88" stroke="#39484d" stroke-width="8" stroke-linecap="round"/>
+  <path d="M46 58h14v38H46zM68 50h14v46H68z" fill="#d9d5bf" stroke="#08161c" stroke-width="3"/>
+  <path d="M43 57h20M65 49h20" stroke="#007992" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="53" cy="101" r="7" fill="#e27b47" stroke="#07151b" stroke-width="3"/>
+  <path d="M29 82l9-30h8l9 30h-8l-2-8H38l-2 8h-7zm11-15h4l-2-9-2 9zM76 52h8v11h9V52h8v30h-8V70h-9v12h-8V52z" fill="url(#cream)"/>
+  <path d="M20 28h22M86 100h22" stroke="#006b82" stroke-width="4" stroke-linecap="square"/>
+</svg>
