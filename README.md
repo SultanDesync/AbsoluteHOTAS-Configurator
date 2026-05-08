@@ -54,8 +54,13 @@ default value is visible instead of looking like a fresh capture.
 
 ## Download
 
-For normal use, download the latest portable EXE or installer from the project
-release page or Nexus Mods page. The app writes only the INI path you choose.
+For normal use, download one of the prebuilt Windows binaries:
+
+- [Portable EXE](releases/1.0.0-rc.1/AbsoluteHOTAS-Configurator-1.0.0-rc.1-portable.exe)
+- [Installer EXE](releases/1.0.0-rc.1/AbsoluteHOTAS-Configurator-1.0.0-rc.1-x64-setup.exe)
+
+The portable EXE runs in place. The installer adds the app through the standard
+Windows installer flow. The app writes only the INI path you choose.
 
 ## Building From Source
 
@@ -68,7 +73,7 @@ npm.cmd run tauri build
 ```
 
 Generated output is intentionally excluded from source control:
-`node_modules`, `dist`, `src-tauri/target`, and installer artifacts.
+`node_modules`, `dist`, and `src-tauri/target`.
 
 ## License
 
