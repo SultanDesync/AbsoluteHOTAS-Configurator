@@ -1,7 +1,7 @@
 import { defaultShipBindings, defaultShipOutputs } from "./shipActions";
 
 export const axisRows = [
-  { title: "Throttle", axis: "iThrottleAxis" },
+  { title: "Throttle", axis: "iThrottleAxis", invert: "bInvertThrottle" },
   { title: "Pitch", axis: "iPitchAxis", sens: "fPitchSensitivity", invert: "bInvertPitch" },
   { title: "Yaw", axis: "iYawAxis", sens: "fYawSensitivity", invert: "bInvertYaw" },
   { title: "Roll", axis: "iRollAxis", sens: "fRollSensitivity", invert: "bInvertRoll" },
@@ -30,6 +30,7 @@ export const defaults = {
   fStrafeSensitivity: "1.0",
   fReverseSensitivity: "1.0",
   bInvertPitch: true,
+  bInvertThrottle: false,
   bInvertYaw: false,
   bInvertRoll: false,
   bInvertStrafeLat: false,
@@ -59,12 +60,13 @@ export const defaults = {
   fDigitalRollValue: "1.0",
   fDigitalStrafeValue: "1.0",
   bShipButtonsEnabled: true,
+  buttonExpansion: [],
   ...defaultShipBindings(),
   ...defaultShipOutputs()
 };
 
 export const sections = {
-  Hardware: ["sDeviceName", "iVJoyDeviceId", "iThrottleAxis", "iPitchAxis", "iYawAxis", "iRollAxis", "iStrafeLatAxis", "iStrafeVertAxis", "iReverseAxis", "fPitchSensitivity", "fYawSensitivity", "fRollSensitivity", "fStrafeSensitivity", "fReverseSensitivity", "bInvertPitch", "bInvertYaw", "bInvertRoll", "bInvertStrafeLat", "bInvertStrafeVert", "bInvertReverse"],
+  Hardware: ["sDeviceName", "iVJoyDeviceId", "iThrottleAxis", "iPitchAxis", "iYawAxis", "iRollAxis", "iStrafeLatAxis", "iStrafeVertAxis", "iReverseAxis", "fPitchSensitivity", "fYawSensitivity", "fRollSensitivity", "fStrafeSensitivity", "fReverseSensitivity", "bInvertPitch", "bInvertThrottle", "bInvertYaw", "bInvertRoll", "bInvertStrafeLat", "bInvertStrafeVert", "bInvertReverse"],
   InputDevices: ["sAxisDeviceName", "iAxisDeviceIndex", "sShipButtonDeviceName", "iShipButtonDeviceIndex"],
   Buttons: ["iActivateButtonId", "iStopButtonId", "iBoostButtonId"],
   Normalization: ["iDetentCenter", "iDetentDeadzone", "bReverseEnabled", "bUnipolarMode", "fIdlePlateau", "fReverseDeadzone", "fReverseActivationThreshold"],
@@ -84,7 +86,38 @@ export function parseKnownValues(text) {
         : match[2];
     }
   }
+  data.buttonExpansion = parseButtonExpansion(text);
   return data;
+}
+
+function parseButtonExpansion(text) {
+  const rows = [];
+  let section = "";
+
+  for (const line of text.split(/\r?\n/)) {
+    const sectionMatch = line.match(/^\s*\[([^\]]+)\]\s*$/);
+    if (sectionMatch) {
+      section = sectionMatch[1].toLowerCase();
+      continue;
+    }
+
+    if (section !== "buttonexpansion") continue;
+
+    const match = line.match(/^\s*i?Button(\d{1,3})\s*=\s*(.*?)\s*$/i);
+    if (!match) continue;
+
+    const button = Number.parseInt(match[1], 10);
+    const output = match[2].trim();
+    if (button < 1 || button > 128 || !output || output.toLowerCase() === "none") continue;
+
+    rows.push({
+      id: `extra-${button}-${rows.length}`,
+      button: String(button),
+      output
+    });
+  }
+
+  return rows;
 }
 
 function boolText(value) {
@@ -171,13 +204,41 @@ fSignpostValue = 0.0314
 fSignpostTolerance = 0.0025
 `;
 
-  text = removeIniSection(removeIniSection(text, "AxisSources"), "ButtonSources");
+  text = removeIniSection(removeIniSection(removeIniSection(text, "AxisSources"), "ButtonSources"), "ButtonExpansion");
   for (const [section, keys] of Object.entries(sections)) {
     for (const key of keys) {
       text = setIniValue(text, section, key, data[key]);
     }
   }
+  text = writeButtonExpansion(text, data.buttonExpansion);
   return text.trimEnd() + "\n";
+}
+
+function writeButtonExpansion(text, rows = []) {
+  const validRows = rows
+    .map((row) => ({
+      button: Number.parseInt(row.button, 10),
+      output: String(row.output ?? "").trim()
+    }))
+    .filter((row) => row.button >= 1 && row.button <= 128 && row.output && row.output.toLowerCase() !== "none");
+
+  if (validRows.length === 0) {
+    return text;
+  }
+
+  const lines = [
+    "",
+    "[ButtonExpansion]",
+    "; Optional raw DirectInput button passthroughs for extra controls.",
+    "; Syntax: iButton<1..128> = key:0xNN, mouse:1, mouse:2, mouse:3, mouse:4, or none.",
+    "; These do not change Starfield's ControlMap_Custom.txt by themselves."
+  ];
+
+  for (const row of validRows) {
+    lines.push(`iButton${row.button} = ${row.output}`);
+  }
+
+  return `${text.trimEnd()}\n${lines.join("\n")}`;
 }
 
 function withDerivedLegacyValues(data) {

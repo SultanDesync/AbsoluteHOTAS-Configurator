@@ -290,6 +290,10 @@ button:disabled {
   grid-template-columns: minmax(260px, 1fr) minmax(210px, 0.72fr) minmax(170px, 0.48fr) 92px 78px;
 }
 
+.extra-row {
+  grid-template-columns: minmax(220px, 1fr) minmax(190px, 0.68fr) minmax(170px, 0.48fr) 92px 78px 94px;
+}
+
 .binding-row strong,
 .binding-row span {
   display: block;
@@ -297,6 +301,29 @@ button:disabled {
 
 .binding-row span {
   margin-top: 3px;
+}
+
+.binding-row .hint {
+  color: #b8d6da;
+}
+
+.binding-row .notice {
+  color: #f2d28b;
+}
+
+.binding-row .warning {
+  color: #ffb3a8;
+}
+
+.output-cell {
+  display: grid;
+  gap: 6px;
+}
+
+.output-note {
+  color: #d4dada;
+  font-size: 12px;
+  min-height: 18px;
 }
 
 .preview-panel {
@@ -322,7 +349,8 @@ textarea {
   .grid.four,
   .binding-row,
   .runtime-row,
-  .ship-row {
+  .ship-row,
+  .extra-row {
     grid-template-columns: 1fr;
   }
 
