@@ -1,6 +1,6 @@
 {
   "name": "absolutehotas-configurator",
-  "version": "1.0.0-rc.1",
+  "version": "1.6.5",
   "private": true,
   "description": "Windows desktop configurator for AbsoluteHOTAS.ini",
   "license": "MIT",
