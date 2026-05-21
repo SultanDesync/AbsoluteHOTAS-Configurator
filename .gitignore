@@ -17,8 +17,7 @@ src-tauri/binaries/
 *.msi
 *.exe
 *.appx
-!releases/
-!releases/**/*.exe
+releases/
 
 # Local configuration / Testing files
 AbsoluteHOTAS.ini

@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [windows-latest]
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Tauri App
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__
+          releaseName: 'AbsoluteHOTAS Configurator v__VERSION__ (AbsoluteHOTAS 1.6 compatible)'
+          releaseBody: |
+            AbsoluteHOTAS Configurator v__VERSION__
+            
+            This release is fully compatible with the **AbsoluteHOTAS 1.6** binding specifications.
+            
+            > [!IMPORTANT]
+            > This build is **NOT** backward-compatible with the previous **1.5b** configuration model due to core updates in the spaceship priority pipeline and the native ControlMap_Custom.txt structural serialization engine.
+            
+            ### Artifact Features
+            * **Portable Release (`.exe`)**: Standalone binary ready for quick execution.
+            * **Standard Installer setup (`.exe`)**: Modern NSIS setup packaging for installation.
+          releaseDraft: false
+          prerelease: false
