@@ -1,3 +1,5 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use std::fs;
 use std::path::Path;
 
@@ -50,6 +52,7 @@ fn main() {
             
             // File Explorer pickers and control map binary manager
             control_map::select_file,
+            control_map::select_save_file,
             control_map::write_control_map,
             
             // DirectInput features

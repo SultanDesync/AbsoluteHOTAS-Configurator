@@ -140,11 +140,13 @@ export function deduplicateBindings(bindings) {
       contextSeenTokens[ctx] = new Set();
     }
     
-    let secondaryToken = binding.secondary_token;
-    if (secondaryToken !== 0x02FF) {
-      const key = `dev:${binding.secondary_device}:tok:${secondaryToken}`;
+    let token = binding.token;
+    // We only deduplicate secondary custom bindings to avoid conflict.
+    // Primary bindings represent vanilla keys, which we shouldn't dynamically nullify.
+    if (binding.is_secondary && token !== 0x02FF) {
+      const key = `dev:${binding.device}:tok:${token}`;
       if (contextSeenTokens[ctx].has(key)) {
-        secondaryToken = 0x02FF;
+        token = 0x02FF;
       } else {
         contextSeenTokens[ctx].add(key);
       }
@@ -152,7 +154,7 @@ export function deduplicateBindings(bindings) {
     
     return {
       ...binding,
-      secondary_token: secondaryToken
+      token: token
     };
   });
 }

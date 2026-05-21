@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { invoke } from "@tauri-apps/api/core";
 import { axisRows, buildIni, defaults, parseKnownValues, setIniValue } from "./ini";
-import { shipActions, outputToStarfieldToken } from "./shipActions";
+import { shipActions, outputToStarfieldToken, unusedKeyboardKeys } from "./shipActions";
 import iconUrl from "./assets/absolutehotas-icon.svg";
 import "./styles.css";
 
@@ -166,6 +166,7 @@ function App() {
   const [status, setStatus] = useState("Ready");
   const [listening, setListening] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [showAutoMapConfirm, setShowAutoMapConfirm] = useState(false);
   const preview = useMemo(() => buildIni(config, loadedIni), [config, loadedIni]);
   const vjoyDevice = useMemo(() => inventory.find(isVJoyDevice) ?? null, [inventory]);
   const outputCollisions = useMemo(() => collectOutputCollisions(config), [config]);
@@ -180,6 +181,9 @@ function App() {
     );
   }, [config]);
   const [recordingActionId, setRecordingActionId] = useState(null);
+  const [axesOpen, setAxesOpen] = useState(true);
+  const [runtimeOpen, setRuntimeOpen] = useState(true);
+  const [digitalOpen, setDigitalOpen] = useState(true);
 
   useEffect(() => {
     invoke("default_control_map_path")
@@ -377,11 +381,63 @@ function App() {
       const text = await invoke("read_ini", { path: iniPath });
       setLoadedIni(text);
       setConfig((current) => ({ ...current, ...parseKnownValues(text) }));
-      setStatus("Loaded");
+      setStatus("Loaded active game configuration");
     } catch (error) {
       setStatus(`Load failed: ${error}`);
     }
   }
+
+  async function loadBackup() {
+    try {
+      const selected = await invoke("select_file", {
+        filterName: "AbsoluteHOTAS INI Backup",
+        filterExt: "ini",
+        title: "Load Backup Profile"
+      });
+      if (selected) {
+        const text = await invoke("read_ini", { path: selected });
+        setLoadedIni(text);
+        const parsed = parseKnownValues(text);
+        setConfig((current) => ({ ...current, ...parsed }));
+        setStatus(`Loaded backup profile: "${parsed.sProfileName || "Unnamed"}"`);
+      }
+    } catch (error) {
+      setStatus(`Load backup failed: ${error}`);
+    }
+  }
+
+  async function createBackup() {
+    try {
+      const selected = await invoke("select_save_file", {
+        filterName: "AbsoluteHOTAS INI Backup",
+        filterExt: "ini",
+        title: "Create Backup Profile"
+      });
+      if (selected) {
+        await invoke("write_ini", { path: selected, contents: preview });
+        setStatus(`Created backup profile: "${config.sProfileName || "Unnamed"}"`);
+      }
+    } catch (error) {
+      setStatus(`Backup failed: ${error}`);
+    }
+  }
+
+  function handleAutoMapUnused() {
+    setShowAutoMapConfirm(true);
+  }
+
+  function confirmAutoMap() {
+    const changes = {};
+    shipActions.forEach((action, index) => {
+      if (index < unusedKeyboardKeys.length) {
+        changes[action.outputIniKey] = unusedKeyboardKeys[index];
+      }
+    });
+    applyChanges(changes);
+    setShowAutoMapConfirm(false);
+    setStatus("Auto-mapped secondary controls to unused keyboard keys. Click 'Save Config' to apply.");
+  }
+
 
   async function saveIni() {
     try {
@@ -391,29 +447,32 @@ function App() {
 
       // 2. Generate and write the binary ControlMap_Custom.txt
       const rawBindings = shipActions
-        .map((action) => {
+        .flatMap((action) => {
           const meta = shipActionMetadata[action.id];
-          if (!meta) return null;
+          if (!meta) return [];
 
           const defaultOutput = action.outputs.main?.value ?? "none";
           const secondaryVal = outputBindings[action.id] ?? defaultOutput;
-          const secondaryTokenInfo = outputToStarfieldToken(secondaryVal);
 
           // Default output uses Starfield's vanilla binding. Custom output must
           // be reflected into ControlMap_Custom.txt so the emitted key triggers
           // the same action in game.
           if (secondaryVal.toLowerCase() === defaultOutput.toLowerCase()) {
-            return null;
+            return [];
           }
 
-          return {
-            context: meta.context,
-            action: meta.action,
-            secondary_device: secondaryTokenInfo.device,
-            secondary_token: secondaryTokenInfo.token
-          };
-        })
-        .filter(Boolean);
+          const secondaryTokenInfo = outputToStarfieldToken(secondaryVal);
+
+          return [
+            {
+              context: meta.context,
+              action: meta.action,
+              device: secondaryTokenInfo.device,
+              token: secondaryTokenInfo.token,
+              is_secondary: true
+            }
+          ];
+        });
 
       const cleanBindings = deduplicateBindings(rawBindings);
       await invoke("write_control_map", { filePath: controlMapPath, bindings: cleanBindings });
@@ -544,6 +603,10 @@ function App() {
         browseControlMapPath={browseControlMapPath}
         loadIni={loadIni}
         saveIni={saveIni}
+        profileName={config.sProfileName ?? "Default"}
+        setProfileName={(val) => applyChanges({ sProfileName: val })}
+        loadBackup={loadBackup}
+        createBackup={createBackup}
       />
 
       <section className={`layout ${previewOpen ? "preview-open" : ""}`}>
@@ -551,20 +614,27 @@ function App() {
           <DeviceSummary device={vjoyDevice} inventory={inventory} onRefresh={refreshInventory} />
 
           <section className="panel">
-            <h2>Flight Axes</h2>
-            <div className="binding-list">
-              {axisRows.map((row) => (
-                <AxisRow
-                  key={row.axis}
-                  row={row}
-                  config={config}
-                  device={vjoyDevice}
-                  listening={listening}
-                  onChange={applyChanges}
-                  onListen={listenFor}
-                />
-              ))}
+            <div className="section-header">
+              <h2>Flight Axes</h2>
+              <button type="button" onClick={() => setAxesOpen(!axesOpen)}>
+                {axesOpen ? "Collapse" : "Expand"}
+              </button>
             </div>
+            {axesOpen && (
+              <div className="binding-list">
+                {axisRows.map((row) => (
+                  <AxisRow
+                    key={row.axis}
+                    row={row}
+                    config={config}
+                    device={vjoyDevice}
+                    listening={listening}
+                    onChange={applyChanges}
+                    onListen={listenFor}
+                  />
+                ))}
+              </div>
+            )}
           </section>
 
           <HosasSettings
@@ -574,59 +644,75 @@ function App() {
           />
 
           <section className="panel">
-            <h2>Runtime Control</h2>
-            <div className="binding-list">
-              {runtimeButtonActions.map((action) => (
-                <RuntimeButtonRow
-                  key={action.id}
-                  action={action}
-                  config={config}
-                  device={vjoyDevice}
-                  listening={listening}
-                  onChange={applyChanges}
-                  onListen={listenFor}
-                />
-              ))}
+            <div className="section-header">
+              <h2>Runtime Control</h2>
+              <button type="button" onClick={() => setRuntimeOpen(!runtimeOpen)}>
+                {runtimeOpen ? "Collapse" : "Expand"}
+              </button>
             </div>
+            {runtimeOpen && (
+              <div className="binding-list">
+                {runtimeButtonActions.map((action) => (
+                  <RuntimeButtonRow
+                    key={action.id}
+                    action={action}
+                    config={config}
+                    device={vjoyDevice}
+                    listening={listening}
+                    onChange={applyChanges}
+                    onListen={listenFor}
+                  />
+                ))}
+              </div>
+            )}
           </section>
 
           <section className="panel">
-            <h2>Digital Axis Substitutes</h2>
-            <div className="binding-list">
-              {digitalAxisButtonActions.map((action) => (
-                <DigitalAxisButtonRow
-                  key={action.id}
-                  action={action}
-                  config={config}
-                  device={vjoyDevice}
-                  listening={listening}
-                  onChange={applyChanges}
-                  onListen={listenFor}
-                />
-              ))}
+            <div className="section-header">
+              <h2>Digital Axis Substitutes</h2>
+              <button type="button" onClick={() => setDigitalOpen(!digitalOpen)}>
+                {digitalOpen ? "Collapse" : "Expand"}
+              </button>
             </div>
-            <div className="grid four digital-values">
-              <Field
-                label="Digital roll value"
-                name="fDigitalRollValue"
-                value={config.fDigitalRollValue}
-                onChange={(key, value) => applyChanges({ [key]: value })}
-                type="number"
-                min="0"
-                max="1"
-                step="0.05"
-              />
-              <Field
-                label="Digital strafe value"
-                name="fDigitalStrafeValue"
-                value={config.fDigitalStrafeValue}
-                onChange={(key, value) => applyChanges({ [key]: value })}
-                type="number"
-                min="0"
-                max="1"
-                step="0.05"
-              />
-            </div>
+            {digitalOpen && (
+              <>
+                <div className="binding-list">
+                  {digitalAxisButtonActions.map((action) => (
+                    <DigitalAxisButtonRow
+                      key={action.id}
+                      action={action}
+                      config={config}
+                      device={vjoyDevice}
+                      listening={listening}
+                      onChange={applyChanges}
+                      onListen={listenFor}
+                    />
+                  ))}
+                </div>
+                <div className="grid four digital-values">
+                  <Field
+                    label="Digital roll value"
+                    name="fDigitalRollValue"
+                    value={config.fDigitalRollValue}
+                    onChange={(key, value) => applyChanges({ [key]: value })}
+                    type="number"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                  />
+                  <Field
+                    label="Digital strafe value"
+                    name="fDigitalStrafeValue"
+                    value={config.fDigitalStrafeValue}
+                    onChange={(key, value) => applyChanges({ [key]: value })}
+                    type="number"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                  />
+                </div>
+              </>
+            )}
           </section>
 
           <ShipActionsTable
@@ -641,6 +727,7 @@ function App() {
             handleChangeSecondary={handleChangeSecondary}
             recordingActionId={recordingActionId}
             handleRecordSecondary={handleRecordSecondary}
+            onAutoMapUnused={handleAutoMapUnused}
           />
 
           <ExtraButtons
@@ -675,6 +762,47 @@ function App() {
           </aside>
         ) : null}
       </section>
+
+      {showAutoMapConfirm && (
+        <div className="modal-overlay">
+          <div className="modal-container">
+            <div className="modal-header">
+              <h3 className="modal-title">⚡ Auto-Map Unused Keys</h3>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setShowAutoMapConfirm(false)}
+              >
+                &times;
+              </button>
+            </div>
+            <div className="modal-body">
+              <p>
+                This will automatically assign <strong>23 completely unused, safe secondary keyboard keys</strong> (such as <code>Numpad 7</code>, <code>[</code>, <code>;</code>, etc.) to all spaceship actions in your configurations.
+              </p>
+              <p>
+                Once saved, this decouples your spaceship controls from on-foot controls, preventing double-binding conflicts and allowing single-function physical bindings on your HOTAS device.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button
+                type="button"
+                onClick={() => setShowAutoMapConfirm(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={confirmAutoMap}
+                style={{ marginLeft: "10px" }}
+              >
+                Confirm & Auto-Map
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

@@ -6,8 +6,9 @@ use std::path::Path;
 pub struct ControlMapBinding {
     pub context: String,
     pub action: String,
-    pub secondary_device: u32,
-    pub secondary_token: u16,
+    pub device: u32,
+    pub token: u16,
+    pub is_secondary: bool,
 }
 
 pub struct Record {
@@ -27,6 +28,15 @@ pub fn select_file(filter_name: String, filter_ext: String, title: String) -> Re
         .add_filter(&filter_name, &[&filter_ext])
         .set_title(&title)
         .pick_file();
+    Ok(file.map(|p| p.to_string_lossy().into_owned()))
+}
+
+#[tauri::command]
+pub fn select_save_file(filter_name: String, filter_ext: String, title: String) -> Result<Option<String>, String> {
+    let file = rfd::FileDialog::new()
+        .add_filter(&filter_name, &[&filter_ext])
+        .set_title(&title)
+        .save_file();
     Ok(file.map(|p| p.to_string_lossy().into_owned()))
 }
 
@@ -60,16 +70,16 @@ pub fn write_control_map(file_path: String, bindings: Vec<ControlMapBinding>) ->
     }
     
     if let Some(sec1) = sections.get_mut(0) {
-        // Starfield stores game-menu secondary keyboard overrides in section 0
-        // with payload flag 0x02. Primary output belongs to AbsoluteHOTAS.ini;
-        // the records written here are for Starfield's own bindings menu.
+        // Starfield stores game-menu keyboard/mouse overrides in section 0.
+        // Primary overrides are flagged with 0x00 in payload[6];
+        // secondary overrides are flagged with 0x02.
         sec1.records.retain(|rec| !is_managed_context(&rec.context));
 
         for binding in &bindings {
             let mut payload = [0u8; 8];
-            payload[0..4].copy_from_slice(&binding.secondary_device.to_le_bytes());
-            payload[4..6].copy_from_slice(&binding.secondary_token.to_le_bytes());
-            payload[6] = 0x02;
+            payload[0..4].copy_from_slice(&binding.device.to_le_bytes());
+            payload[4..6].copy_from_slice(&binding.token.to_le_bytes());
+            payload[6] = if binding.is_secondary { 0x02 } else { 0x00 };
             payload[7] = 0x00;
             sec1.records.push(Record {
                 context: binding.context.clone(),
@@ -85,15 +95,17 @@ pub fn write_control_map(file_path: String, bindings: Vec<ControlMapBinding>) ->
         sec2.records.retain(|rec| !is_managed_context(&rec.context));
     }
     
-    // Cross-Action conflict resolution in Section 1 (Starfield secondary override)
+    // Cross-Action conflict resolution in Section 0 (Starfield keyboard/mouse override)
+    // We only resolve secondary conflicts, keeping default primary bindings intact.
     if let Some(sec1) = sections.get_mut(0) {
         for binding in &bindings {
-            if binding.secondary_token != 0x02FF {
+            if binding.is_secondary && binding.token != 0x02FF {
                 for rec in &mut sec1.records {
                     if rec.context == binding.context && rec.action != binding.action {
                         let rec_device = u32::from_le_bytes(rec.payload[0..4].try_into().unwrap());
                         let rec_token = u16::from_le_bytes(rec.payload[4..6].try_into().unwrap());
-                        if rec_device == binding.secondary_device && rec_token == binding.secondary_token {
+                        let rec_is_secondary = rec.payload[6] == 0x02;
+                        if rec_is_secondary && rec_device == binding.device && rec_token == binding.token {
                             let mut payload = [0u8; 8];
                             payload[0..4].copy_from_slice(&1u32.to_le_bytes());
                             payload[4..6].copy_from_slice(&0x02FFu16.to_le_bytes());
@@ -243,8 +255,9 @@ mod tests {
             ControlMapBinding {
                 context: "ShipHUD".to_string(),
                 action: "Boosters".to_string(),
-                secondary_device: 1,
-                secondary_token: 0x02FF,
+                device: 1,
+                token: 0x02FF,
+                is_secondary: true,
             }
         ];
         
@@ -317,14 +330,16 @@ mod tests {
             ControlMapBinding {
                 context: "ShipHUD".to_string(),
                 action: "TogglePOV".to_string(),
-                secondary_device: 1,
-                secondary_token: 0x02FF,
+                device: 1,
+                token: 0x02FF,
+                is_secondary: true,
             },
             ControlMapBinding {
                 context: "ShipHUD".to_string(),
                 action: "SelectTarget".to_string(),
-                secondary_device: 1,
-                secondary_token: 0x01DD,
+                device: 1,
+                token: 0x01DD,
+                is_secondary: true,
             }
         ];
         

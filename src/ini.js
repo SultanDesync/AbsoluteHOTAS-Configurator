@@ -11,6 +11,7 @@ export const axisRows = [
 ];
 
 export const defaults = {
+  sProfileName: "Default",
   sDeviceName: "vJoy",
   iVJoyDeviceId: "1",
   sAxisDeviceName: "vJoy",
@@ -70,6 +71,7 @@ export const defaults = {
 };
 
 export const sections = {
+  General: ["sProfileName"],
   Hardware: ["sDeviceName", "iVJoyDeviceId", "iThrottleAxis", "iPitchAxis", "iYawAxis", "iRollAxis", "iStrafeLatAxis", "iStrafeVertAxis", "iReverseAxis", "fPitchSensitivity", "fYawSensitivity", "fRollSensitivity", "fStrafeSensitivity", "fReverseSensitivity", "bInvertPitch", "bInvertThrottle", "bInvertYaw", "bInvertRoll", "bInvertStrafeLat", "bInvertStrafeVert", "bInvertReverse"],
   InputDevices: ["sAxisDeviceName", "iAxisDeviceIndex", "sShipButtonDeviceName", "iShipButtonDeviceIndex"],
   Buttons: ["bAlwaysOn", "iActivateButtonId", "iStopButtonId", "iBoostButtonId"],
