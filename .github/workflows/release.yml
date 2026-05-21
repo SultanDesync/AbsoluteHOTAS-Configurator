@@ -54,3 +54,4 @@ jobs:
             * **Standard Installer setup (`.exe`)**: Modern NSIS setup packaging for installation.
           releaseDraft: false
           prerelease: false
+          includeUpdaterJson: false
