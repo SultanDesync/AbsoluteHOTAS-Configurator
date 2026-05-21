@@ -1,0 +1,132 @@
+{
+  "project_name": "AbsoluteHOTAS Configurator",
+  "version": "1.0.0-rc.1",
+  "description": "A Tauri-React desktop application for Windows, designed to configure the 'AbsoluteHOTAS.ini' file and synchronized 'ControlMap_Custom.txt' key bindings for the AbsoluteHOTAS Starfield input mod.",
+  "tech_stack": {
+    "core": "HTML5, Vanilla CSS, React (18.3.1) with Vite (8.0.11)",
+    "desktop_framework": "Tauri v2 (@tauri-apps/api v2.0.0, @tauri-apps/cli v2.0.0)",
+    "backend_language": "Rust (2021 Edition)",
+    "windows_apis": "DirectInput8 (win_input / SendInput via windows-rs 0.61)"
+  },
+  "directory_structure": {
+    "root": {
+      "package.json": "Node dependencies and build/run scripts.",
+      "index.html": "Vite entry point for the frontend.",
+      "README.md": "Overview, workflow, and basic requirements.",
+      "LICENSE": "MIT License text.",
+      "NOTICE.md": "Third-party attributions.",
+      "src": "Frontend React codebase (modularized under 500 lines per file).",
+      "src-tauri": "Backend Rust codebase and Tauri configuration (modularized under 500 lines per file).",
+      "docs": "Project reference materials and guides."
+    }
+  },
+  "files": {
+    "package.json": {
+      "description": "Vite & React frontend dependencies, along with Tauri CLI integration."
+    },
+    "src/ini.js": {
+      "description": "Logic for parsing and building the `AbsoluteHOTAS.ini` file.",
+      "key_elements": [
+        "axisRows: Array defining throttle, pitch, yaw, roll, strafe lateral, strafe vertical, and reverse slider axis fields.",
+        "defaults: Object with default config settings.",
+        "sections: Mapping of INI section names to key property lists.",
+        "parseKnownValues(text): Parses the INI content into a React-friendly config state.",
+        "buildIni(data, loadedIni): Serializes the React state back into a structured INI file."
+      ]
+    },
+    "src/shipActions.js": {
+      "description": "Definitions and helper functions for ship actions and physical buttons.",
+      "key_elements": [
+        "keyboardOutputs / mouseOutputs: Scancodes and values for key:0xNN or mouse:N options.",
+        "shipActions: Definitions of the 23 named spaceship actions supported by AbsoluteHOTAS.",
+        "defaultShipBindings(): Generates an object initializing all physical ship actions to -1.",
+        "defaultShipOutputs(): Generates an object mapping all ship actions to their vanilla outputs."
+      ]
+    },
+    "src/main.jsx": {
+      "description": "React entry point serving as the central coordinator, state owner, and layout builder.",
+      "key_elements": [
+        "App: Orchestrates central state hooks, file loading/saving pipelines, and device refresh timers.",
+        "applyChanges(changes): Sets global config state values.",
+        "loadIni() / saveIni(): Frontend-backend bridge for reading/writing configuration.",
+        "listenFor(kind, target): Arms the Rust recorder for axis/button binding."
+      ]
+    },
+    "src/components/FormControls.jsx": {
+      "description": "Reusable layout helper elements.",
+      "key_elements": [
+        "Field: Layout textbox input for numerical and textual config values.",
+        "Checkbox: Checked status layout block."
+      ]
+    },
+    "src/components/utils.js": {
+      "description": "Shared pure utility helper functions for device polling and binding mappings.",
+      "key_elements": [
+        "isVJoyDevice(device): Performs case-insensitive name matching to isolate vJoy.",
+        "collectOutputCollisions(config): Detects redundant output mapping collisions across standard and custom actions.",
+        "axisControlFromUsage / buttonControlFromId: Resolves physical bindings to names.",
+        "deduplicateBindings(bindings): Strips duplicate scancode inputs within identical contexts to prevent game desyncs."
+      ]
+    },
+    "src/components/PathSettings.jsx": {
+      "description": "Native browse dialog and saving triggers panel."
+    },
+    "src/components/HosasSettings.jsx": {
+      "description": "Manages detent calibrations, plateaus, ramping rates, unipolar throttle, always-on mode, and mutually exclusive deflection vs. keyboard pulsation toggles."
+    },
+    "src/components/ExtraButtons.jsx": {
+      "description": "Collapsible extra button grid panel allowing mapping of physical DirectInput controls to scancode overrides outside standard layouts."
+    },
+    "src/components/ShipActionsTable.jsx": {
+      "description": "Comprehensive named ship actions list displaying default scancodes, custom output options, and interactive secondary overrides recording triggers."
+    },
+    "src/components/JoystickBindings.jsx": {
+      "description": "vJoy device inventory blocks, analog axis sensitivity / invert configuration lines, and digital key replacement fields."
+    },
+    "src/styles.css": {
+      "description": "Vibrant custom dark-mode dashboard theme for the desktop configurator."
+    },
+    "src-tauri/tauri.conf.json": {
+      "description": "Tauri v2 configuration file specifying window sizes, bundle details, and scripts."
+    },
+    "src-tauri/Cargo.toml": {
+      "description": "Rust dependencies (serde, serde_json, windows crate with DirectInput support)."
+    },
+    "src-tauri/build.rs": {
+      "description": "Rust build script linking static DirectInput libraries."
+    },
+    "src-tauri/src/main.rs": {
+      "description": "Application entrypoint, coordinating native Tauri builder and central command routing."
+    },
+    "src-tauri/src/win_input.rs": {
+      "description": "Provides preview simulation bindings using native SendInput keyboard and mouse emulator macros."
+    },
+    "src-tauri/src/control_map.rs": {
+      "description": "Custom parser, merge, backup, and serialized writer for the binary Starfield ControlMap_Custom.txt configurations."
+    },
+    "src-tauri/src/direct_input/types.rs": {
+      "description": "Data structures representing device lists, sampled analog deflections, and captured bindings."
+    },
+    "src-tauri/src/direct_input/devices.rs": {
+      "description": "DirectInput device lookup, polling queues, and Win32 character parsing utilities under target-level conditional windows annotations."
+    },
+    "src-tauri/src/direct_input/recording.rs": {
+      "description": "DirectInput background recorder threads. The axis recorder samples rest noise baseline values, capturing deliberate analog motions resilient to sensor noise."
+    },
+    "src-tauri/src/direct_input/mod.rs": {
+      "description": "Binds and exposes direct input scanner and listening functions to Tauri command scopes."
+    }
+  },
+  "core_concepts": {
+    "vjoy_only_target": "The app assumes the target input device is 'vJoy' (case-insensitive product/instance name match) with a fallback to DirectInput index 0.",
+    "directinput_recorders": "Rust uses a robust multi-device polling loop to detect axis and button updates. The axis recorder samples rest noise for 250ms first, then requires a deliberate movement above min threshold to select the axis.",
+    "sendinput_emulation": "Emits Windows keyboard scancodes (scan code + extended key flags) or mouse click events via SendInput, allowing live testing of mapped keys directly from the UI.",
+    "button_expansion": "Allows adding raw passthroughs where physical buttons on vJoy (1-128) emit keyboard scancodes or mouse outputs, without needing named ship action slots.",
+    "control_map_sync": "Parsed ship actions and secondary overrides are natively parsed, merged structurally, and written back into Starfield's binary ControlMap_Custom.txt file. In-place backup generation ensures users never lose their layouts."
+  },
+  "build_and_dev_commands": {
+    "install": "npm.cmd install",
+    "dev": "npm.cmd run tauri dev",
+    "build": "npm.cmd run tauri build"
+  }
+}

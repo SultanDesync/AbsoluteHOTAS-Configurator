@@ -1,10 +1,39 @@
+# Dependencies
 node_modules/
+
+# Production builds and cache
 dist/
+.vite/
+
+# Tauri & Rust
 src-tauri/target/
 src-tauri/gen/
+src-tauri/binaries/
+
+# Backups and temporary files generated during testing/use
+*.bak
+*.tmp
 *.log
 *.msi
 *.exe
 *.appx
 !releases/
 !releases/**/*.exe
+
+# Local configuration / Testing files
+AbsoluteHOTAS.ini
+ControlMap_Custom.txt
+StarfieldCustom.ini
+
+# IDEs / Editors
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS files
+Thumbs.db
+.DS_Store

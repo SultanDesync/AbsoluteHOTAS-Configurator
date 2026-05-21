@@ -1,125 +1,108 @@
 # AbsoluteHOTAS Configurator
 
-Desktop companion app for building `AbsoluteHOTAS.ini` for the AbsoluteHOTAS
-Starfield plugin.
+A premium desktop companion application built with **Tauri v2** and **React** for configuring the `AbsoluteHOTAS.ini` file and synchronizing your custom key bindings with Starfield's binary `ControlMap_Custom.txt` layout.
 
-This repository contains only the standalone configurator source. It does not
-include the AbsoluteHOTAS SFSE plugin source, research notes, release payloads,
-or other parent-project files.
+Designed explicitly for the AbsoluteHOTAS input mod, this configurator allows you to easily map your flight controls, calibrate joystick sensitivities, manage HOSAS modes, configure additional raw buttons, and prevent input conflicts.
 
-This version is intentionally barebones:
+---
 
-- Load and save `AbsoluteHOTAS.ini`
-- Select vJoy axes from the controls DirectInput reports
-- Bind the next changed vJoy axis or button
-- Bind activate, deactivate/stop, and boost stand-down buttons in `[Buttons]`
-- Bind reverse slider memory-injection fields
-- Bind ship action buttons in `[ShipButtons]`
-- Choose vanilla ship output overrides in `[ShipButtonOutputs]`
-- Preview the exact INI that will be written with the `Show INI` toggle
+## Key Features
 
-The app targets vJoy only. It does not keep a live monitor, event logger,
-GUID-backed source bindings, alternate recording paths, or smoothing/dampening
-logic.
+### 🛠️ Configurator Core
+- **Load & Save `AbsoluteHOTAS.ini`**: Full support for hardware, buttons, normalization, injection, and ship-button configurations.
+- **Native DirectInput Scanning**: Arms a noise-resilient recording thread to listen for your next vJoy joystick button press or deliberate analog axis deflection.
+- **Visual INI Preview**: Built-in side drawer lets you inspect the raw INI content generated in real-time.
+
+### 🎮 HOSAS & Advanced Calibration
+- **Detent Calibration**: Direct control over deadzones, idle plateaus, poll rates, and unipolar throttles.
+- **Mutually Exclusive HOSAS Modes**:
+  - **Incremental Throttle Mode (Deflection)**: For deflection-based analog throttle controls.
+  - **Keyboard Emulation Mode (W/S Pulse)**: Emulates tap patterns for responsive control.
+- **Ramping Rate**: Customize deflection throttling ramp rates for experimental setups.
+- **Always On Mode**: Keep mappings continuously active.
+- **Reverse Axis Memory Injection**: Toggle separate sliders, deadzones, activation limits, and active telemetry hooks.
+
+### 🛰️ Ship Controls & Output Bindings
+- **Full Ship Action Matrix**: Map 23 named spaceship events (Boosters, weapons, system power allocation, etc.) to your joystick buttons.
+- **Output Recording**: Keep the vanilla Starfield output as `Default`, or record a keyboard/mouse output that replaces the vanilla SendInput binding in `AbsoluteHOTAS.ini`.
+- **Duplicate & Collision Alerts**: Warns you instantly in real-time if a chosen scancode or button is already bound elsewhere or conflicts with a vanilla preset.
+
+### ➕ Extra Passthrough Buttons
+- **Collapsible panel**: Expands on demand to map arbitrary joystick buttons (1-128) directly to scancode overrides outside of the primary ship layout.
+- **Defaults to Collapsed**: Keeps the dashboard sleek and clean upon launch.
+
+### 💾 Binary ControlMap Synchronization
+- **Direct Custom Patching**: Reads, parses, structurally merges, and writes your output bindings directly to Starfield's custom binary mapping file: `ControlMap_Custom.txt`.
+- **Automatic Backups**: Generates a `.bak` backup file on every save to ensure you never lose your previous configurations.
+- **Deduplication Engine**: Backend logic strips duplicate mappings within identical contexts to prevent desyncs during spaceflight.
+
+---
+
+## Folder Modularity Layout
+Both the frontend and the Tauri backend have been modularized into cohesive, single-responsibility files of **under 500 lines** for extremely fast compilation, clean code reviews, and high readability:
+
+```mermaid
+graph TD
+    subgraph Rust Backend
+        main_rs[main.rs] --> win_input[win_input.rs]
+        main_rs --> control_map[control_map.rs]
+        main_rs --> direct_input_mod[direct_input/mod.rs]
+        direct_input_mod --> direct_input_devices[direct_input/devices.rs]
+        direct_input_mod --> direct_input_recording[direct_input/recording.rs]
+        direct_input_mod --> direct_input_types[direct_input/types.rs]
+    end
+
+    subgraph React Frontend
+        main_jsx[main.jsx] --> PathSettings[components/PathSettings.jsx]
+        main_jsx --> HosasSettings[components/HosasSettings.jsx]
+        main_jsx --> ShipActionsTable[components/ShipActionsTable.jsx]
+        main_jsx --> ExtraButtons[components/ExtraButtons.jsx]
+        main_jsx --> JoystickBindings[components/JoystickBindings.jsx]
+        main_jsx --> utils[components/utils.js]
+        main_jsx --> FormControls[components/FormControls.jsx]
+    end
+```
+
+---
 
 ## Binding Workflow
 
-1. Load the INI, or start from defaults.
-2. Confirm the app found the vJoy DirectInput device.
-3. Use a dropdown to choose a known vJoy control, or click `Bind`.
-4. Move the intended vJoy axis or press the intended vJoy button.
-5. Save the generated INI.
+1. **Load Configuration**: Choose your `AbsoluteHOTAS.ini` and `ControlMap_Custom.txt` using the native file browser dials, and click **Load**.
+2. **Device Connection**: Confirm that the vJoy summary panel successfully displays your active DirectInput channel.
+3. **Capture Inputs**: 
+   - Choose a known control from the axis/button dropdowns, or click **Bind**.
+   - Deflect your analog axis or tap a button to bind it in real-time.
+4. **Set Up Outputs**: Toggle vanilla presets, define key scancodes, or click **Rec** to record secondary keyboard/mouse inputs.
+5. **Deduplicate & Save**: Click **Save** to write the INI, generate a `.bak` copy of your control map, and structurally serialize your bindings to Starfield!
 
-`Bind` uses the native DirectInput recorder scoped to the vJoy device. Axis
-recording samples the current rest/noise state, then captures deliberate
-movement. Button recording captures a new vJoy button press after arming. Axis
-values are written as HID usage IDs in `[Hardware]`, such as `0x30` for X and
-`0x32` for Z. Button values are written as 1-indexed vJoy DirectInput button
-IDs. `-1` disables an individual button binding.
+---
 
-Ship outputs mirror physical vJoy button duration. A short press becomes a
-short vanilla input; a held vJoy button keeps the mapped key or mouse button
-held until release.
+## Build Requirements
 
-If `Bind` times out, the row is left unchanged. Axis rows display the current
-INI value when it does not resolve to a detected vJoy control, so a stale or
-default value is visible instead of looking like a fresh capture.
+- **Operating System**: Windows 10/11
+- **Driver Setup**: Installed and configured vJoy joystick driver virtual channels.
+- **Runtimes**: Microsoft Edge WebView2 (standard on modern Windows).
+- **Toolchain**: Node.js (v18+) and Rust (stable toolchain) are required ONLY if compiling from source.
 
-## Requirements
+### Building From Source
 
-- Windows
-- vJoy installed and configured
-- Microsoft Edge WebView2 Runtime, normally already present on modern Windows
-- Node.js and Rust, only if building from source
-
-## Download
-
-For normal use, download one of the prebuilt Windows binaries:
-
-- [Portable EXE](releases/1.0.0-rc.1/AbsoluteHOTAS-Configurator-1.0.0-rc.1-portable.exe)
-- [Installer EXE](releases/1.0.0-rc.1/AbsoluteHOTAS-Configurator-1.0.0-rc.1-x64-setup.exe)
-
-The portable EXE runs in place. The installer adds the app through the standard
-Windows installer flow. The app writes only the INI path you choose.
-
-## Building From Source
-
-Use `npm.cmd` on Windows shells where PowerShell blocks `npm.ps1`:
+Use `npm.cmd` on Windows shells where standard execution policies restrict PowerShell scripts:
 
 ```powershell
+# 1. Install required packages
 npm.cmd install
+
+# 2. Start the hot-reloading development client
 npm.cmd run tauri dev
+
+# 3. Compile the production-ready standalone setup executable
 npm.cmd run tauri build
 ```
 
-Generated output is intentionally excluded from source control:
-`node_modules`, `dist`, and `src-tauri/target`.
+The output executable packages everything into a secure, portable, and fast desktop dashboard setup.
+
+---
 
 ## License
 
-This configurator source is released under the MIT License. See `LICENSE`.
-
-## Attribution
-
-See `NOTICE.md` for third-party technology attributions and trademark notes.
-
-## Runtime Schema
-
-```ini
-[InputDevices]
-sAxisDeviceName = vJoy
-iAxisDeviceIndex = 0
-sShipButtonDeviceName = vJoy
-iShipButtonDeviceIndex = 0
-
-[Buttons]
-iActivateButtonId = 69
-iStopButtonId = 70
-iBoostButtonId = -1
-```
-
-Reverse slider memory injection is exported separately from ship button output:
-
-```ini
-[Hardware]
-iReverseAxis = 0x36
-fReverseSensitivity = 1.0
-bInvertReverse = false
-
-[Normalization]
-bReverseEnabled = false
-fReverseDeadzone = 0.05
-fReverseActivationThreshold = 0.05
-
-[Injection]
-bReverseAxisEnabled = true
-```
-
-`bReverseEnabled` is legacy center-detent throttle reverse. Keep it separate from
-`bReverseAxisEnabled`, which controls the dedicated reverse slider path.
-
-`[ShipButtonOutputs]` accepts:
-
-- `key:0xNN` for keyboard scan-code output
-- `mouse:1`, `mouse:2`, `mouse:3`, `mouse:4` for left, right, middle, and XBUTTON1
-- `none` to disable emitted output for that action
+This project is licensed under the MIT License. See `LICENSE` for the complete license terms.

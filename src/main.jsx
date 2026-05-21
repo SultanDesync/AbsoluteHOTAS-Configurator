@@ -1,10 +1,32 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { invoke } from "@tauri-apps/api/core";
-import { axisRows, buildIni, defaults, normalizeAxisControlId, parseKnownValues } from "./ini";
-import { outputCatalog, outputFromValue, outputLabel, outputOptionsForAction, shipActions } from "./shipActions";
+import { axisRows, buildIni, defaults, parseKnownValues, setIniValue } from "./ini";
+import { shipActions, outputToStarfieldToken } from "./shipActions";
 import iconUrl from "./assets/absolutehotas-icon.svg";
 import "./styles.css";
+
+// Modular subcomponents
+import { Field, Checkbox } from "./components/FormControls";
+import { PathSettings } from "./components/PathSettings";
+import { HosasSettings } from "./components/HosasSettings";
+import { ExtraButtons } from "./components/ExtraButtons";
+import { ShipActionsTable } from "./components/ShipActionsTable";
+import { DeviceSummary, AxisRow, RuntimeButtonRow, DigitalAxisButtonRow } from "./components/JoystickBindings";
+
+// Shared utility helpers
+import {
+  deviceIndex,
+  isVJoyDevice,
+  collectOutputCollisions,
+  axisControlFromUsage,
+  buttonControlFromId,
+  axisValueChanges,
+  buttonValueChanges,
+  extraButtonValueChanges,
+  deduplicateBindings,
+  controlLabel
+} from "./components/utils";
 
 const runtimeButtonActions = [
   { id: "Activate", label: "Activate / Force Reset", iniKey: "iActivateButtonId", mode: "pulse" },
@@ -22,357 +44,119 @@ const digitalAxisButtonActions = [
   { id: "DigitalStrafeDown", label: "Digital Strafe Down", iniKey: "iDigitalStrafeDownButton" }
 ];
 
-function Field({ label, name, value, onChange, type = "text", ...props }) {
-  return (
-    <label>
-      {label}
-      <input name={name} type={type} value={value} onChange={(event) => onChange(name, event.target.value)} {...props} />
-    </label>
-  );
-}
+const shipActionMetadata = {
+  FireBoosters: { context: "ShipHUD", action: "Boosters" },
+  SwitchFlightModes: { context: "ShipHUD", action: "SwitchFlightModes" },
+  TogglePov: { context: "ShipHUD", action: "TogglePOV" },
+  FireWeapon0: { context: "ShipHUD", action: "WeaponGroup1" },
+  FireWeapon1: { context: "ShipHUD", action: "WeaponGroup2" },
+  FireWeapon2: { context: "ShipHUD", action: "WeaponGroup3" },
+  ShipAction1: { context: "ShipHUD", action: "XButton" },
+  SelectTarget: { context: "ShipHUD", action: "SelectTarget" },
+  IncreaseSystemPower: { context: "ShipHUD", action: "Up" },
+  DecreaseSystemPower: { context: "ShipHUD", action: "Down" },
+  PreviousSystem: { context: "ShipHUD", action: "Left" },
+  NextSystem: { context: "ShipHUD", action: "Right" },
+  OpenScanner: { context: "ShipHUD", action: "SHMonocle" },
+  Repair: { context: "ShipHUD", action: "RepairShip" },
+  ShipAlternateControlHold: { context: "ShipHUD", action: "AltHold" },
+  Cruise: { context: "ShipHUD", action: "Cruise" },
+  Cancel: { context: "ShipHUD_Cancel", action: "Cancel" },
+  UndockTakeOff: { context: "Spaceship_Interaction", action: "TakeOff" },
+  GetUp: { context: "Spaceship_Interaction", action: "Cancel" },
+  ExitShipFromCockpit: { context: "Spaceship_Interaction", action: "ExitShip" },
+  ZoomCameraIn: { context: "ShipFlightCam_FreeRot", action: "FOVZoomIn" },
+  ZoomCameraOut: { context: "ShipFlightCam_FreeRot", action: "FOVZoomOut" },
+  AutopilotOnOff: { context: "ShipHUD_CruiseMode", action: "LockCourse" }
+};
 
-function Checkbox({ label, name, checked, onChange }) {
-  return (
-    <label className="check">
-      <input name={name} type="checkbox" checked={checked} onChange={(event) => onChange(name, event.target.checked)} />
-      {label}
-    </label>
-  );
-}
-
-function deviceIndex(device) {
-  return device.enumeration_index ?? device.enumerationIndex ?? 0;
-}
-
-function isVJoyDevice(device) {
-  const text = `${device.name ?? ""} ${device.instance_name ?? ""} ${device.product_name ?? ""}`.toLowerCase();
-  return text.includes("vjoy");
-}
-
-function controlsFor(device, kind) {
-  return (device?.controls ?? []).filter((control) => control.kind === kind);
-}
-
-function controlLabel(control) {
-  if (!control) return "Unbound";
-  const objectName = control.name && control.name !== control.label ? ` - ${control.name}` : "";
-  return `${control.label}${objectName}`;
-}
-
-function axisBindingLabel(device, value) {
-  const control = selectedControl(device, "axis", value);
-  return control ? controlLabel(control) : `Current INI value: ${value}`;
-}
-
-function controlKey(control) {
-  return `${control.kind}:${control.id}:${control.offset ?? ""}:${control.instance ?? ""}`;
-}
-
-function selectedControl(device, kind, value) {
-  return controlsFor(device, kind).find((control) => String(control.id).toLowerCase() === String(value).toLowerCase()) ?? null;
-}
-
-function axisValueChanges(row, control) {
-  return control ? { [row.axis]: normalizeAxisControlId(control.id) } : {};
-}
-
-function buttonValueChanges(action, control) {
-  return { [action.iniKey]: control ? String(control.id) : "-1" };
-}
-
-function defaultOutputValue(action) {
-  return action.outputs.main?.value ?? "none";
-}
-
-function normalizedOutputValue(value) {
-  return String(value ?? "none").trim().toLowerCase();
-}
-
-function outputInstruction(action, selectedOutputValue) {
-  const output = outputFromValue(action, selectedOutputValue);
-  const selected = outputLabel(output);
-  const vanilla = outputLabel(action.outputs.main);
-  const defaultValue = defaultOutputValue(action);
-  const isVanilla = normalizedOutputValue(selectedOutputValue) === normalizedOutputValue(defaultValue);
-
-  if (!action.outputs.main) {
-    return selectedOutputValue && normalizedOutputValue(selectedOutputValue) !== "none"
-      ? `Bind Starfield ${action.label} to ${selected}`
-      : "No vanilla binding; choose an output and bind Starfield to match";
-  }
-
-  if (isVanilla) {
-    return `Starfield default: ${vanilla}`;
-  }
-
-  if (normalizedOutputValue(selectedOutputValue) === "none") {
-    return `No plugin output; Starfield ${action.label} will not receive a key`;
-  }
-
-  return `Bind Starfield ${action.label} to ${selected}`;
-}
-
-function collectOutputCollisions(config) {
-  const shipRows = shipActions.map((action) => ({
-    id: action.id,
-    label: action.label,
-    value: normalizedOutputValue(config[action.outputIniKey]),
-    defaultValue: normalizedOutputValue(defaultOutputValue(action)),
-    section: "ship"
-  }));
-  const extraRows = config.buttonExpansion.map((row) => ({
-    id: row.id,
-    label: row.button ? `Extra Button ${row.button}` : "Extra Button",
-    value: normalizedOutputValue(row.output),
-    defaultValue: "none",
-    section: "extra"
-  }));
-  const rows = [...shipRows, ...extraRows].filter((row) => row.value && row.value !== "none");
-  const byOutput = rows.reduce((map, row) => {
-    const items = map.get(row.value) ?? [];
-    items.push(row);
-    map.set(row.value, items);
-    return map;
-  }, new Map());
-  const vanillaByOutput = shipRows.reduce((map, row) => {
-    if (row.defaultValue && row.defaultValue !== "none") {
-      const items = map.get(row.defaultValue) ?? [];
-      items.push(row);
-      map.set(row.defaultValue, items);
-    }
-    return map;
-  }, new Map());
-
-  return { byOutput, vanillaByOutput };
-}
-
-function extraButtonValueChanges(row, control) {
-  return {
-    ...row,
-    button: control ? String(control.id) : ""
-  };
-}
-
-function axisControlFromUsage(device, usageId) {
-  return controlsFor(device, "axis").find((control) => String(control.id).toLowerCase() === String(usageId).toLowerCase()) ?? {
-    kind: "axis",
-    id: normalizeAxisControlId(usageId),
-    label: normalizeAxisControlId(usageId)
-  };
-}
-
-function buttonControlFromId(device, buttonId) {
-  return controlsFor(device, "button").find((control) => String(control.id) === String(buttonId)) ?? {
-    kind: "button",
-    id: String(buttonId),
-    label: `Button ${buttonId}`
-  };
-}
-
-function DeviceSummary({ device, inventory, onRefresh }) {
-  const axes = controlsFor(device, "axis").length;
-  const buttons = controlsFor(device, "button").length;
-  const allDevices = inventory.length;
-
-  return (
-    <section className="panel device-panel">
-      <div className="section-header">
-        <h2>vJoy Device</h2>
-        <button type="button" onClick={onRefresh}>Refresh</button>
-      </div>
-      {device ? (
-        <div className="device-line">
-          <strong>{deviceIndex(device)}: {device.name}</strong>
-          <span>{axes} axes / {buttons} buttons</span>
-        </div>
-      ) : (
-        <div className="empty">No vJoy DirectInput device found. DirectInput devices seen: {allDevices}</div>
-      )}
-    </section>
-  );
-}
-
-function AxisRow({ row, config, device, listening, onChange, onListen }) {
-  const control = selectedControl(device, "axis", config[row.axis]);
-
-  return (
-    <div className="binding-row axis-row">
-      <div>
-        <strong>{row.title}</strong>
-        <span>{axisBindingLabel(device, config[row.axis])}</span>
-      </div>
-      <select value={control ? control.id : ""} onChange={(event) => onChange(axisValueChanges(row, controlsFor(device, "axis").find((item) => item.id === event.target.value)))}>
-        <option value="" disabled>{device ? "Choose vJoy axis" : "No vJoy device"}</option>
-        {controlsFor(device, "axis").map((item) => (
-          <option key={controlKey(item)} value={item.id}>{controlLabel(item)}</option>
-        ))}
-      </select>
-      {row.sens ? <Field label="Sensitivity" name={row.sens} value={config[row.sens]} onChange={(key, value) => onChange({ [key]: value })} type="number" min="0" max="5" step="0.05" /> : <div />}
-      {row.invert ? <Checkbox label="Invert" name={row.invert} checked={config[row.invert]} onChange={(key, value) => onChange({ [key]: value })} /> : <div />}
-      <button type="button" onClick={() => onListen("axis", row)} disabled={!device || Boolean(listening)}>
-        {listening === `axis:${row.axis}` ? "Binding" : "Bind"}
-      </button>
-    </div>
-  );
-}
-
-function RuntimeButtonRow({ action, config, device, listening, onChange, onListen }) {
-  const control = selectedControl(device, "button", config[action.iniKey]);
-
-  return (
-    <div className="binding-row runtime-row">
-      <div>
-        <strong>{action.label}</strong>
-        <span>{controlLabel(control)}</span>
-      </div>
-      <select value={control ? control.id : ""} onChange={(event) => onChange(buttonValueChanges(action, controlsFor(device, "button").find((item) => item.id === event.target.value)))}>
-        <option value="">Unbound</option>
-        {controlsFor(device, "button").map((item) => (
-          <option key={controlKey(item)} value={item.id}>{controlLabel(item)}</option>
-        ))}
-      </select>
-      <button type="button" onClick={() => onListen("button", action)} disabled={!device || Boolean(listening)}>
-        {listening === `button:${action.id}` ? "Binding" : "Bind"}
-      </button>
-    </div>
-  );
-}
-
-function DigitalAxisButtonRow({ action, config, device, listening, onChange, onListen }) {
-  const control = selectedControl(device, "button", config[action.iniKey]);
-
-  return (
-    <div className="binding-row runtime-row">
-      <div>
-        <strong>{action.label}</strong>
-        <span>{control ? controlLabel(control) : config[action.iniKey] === "-1" ? "Unbound" : `Current INI value: ${config[action.iniKey]}`}</span>
-      </div>
-      <select value={control ? control.id : ""} onChange={(event) => onChange(buttonValueChanges(action, controlsFor(device, "button").find((item) => item.id === event.target.value)))}>
-        <option value="">Unbound</option>
-        {controlsFor(device, "button").map((item) => (
-          <option key={controlKey(item)} value={item.id}>{controlLabel(item)}</option>
-        ))}
-      </select>
-      <button type="button" onClick={() => onListen("button", action)} disabled={!device || Boolean(listening)}>
-        {listening === `button:${action.id}` ? "Binding" : "Bind"}
-      </button>
-    </div>
-  );
-}
-
-function ShipActionRow({ action, config, device, listening, collisions, onChange, onListen, onTest }) {
-  const control = selectedControl(device, "button", config[action.iniKey]);
-  const output = outputFromValue(action, config[action.outputIniKey]);
-  const outputOptions = outputOptionsForAction(action);
-  const selectedOutputValue = output?.value ?? config[action.outputIniKey] ?? "none";
-  const defaultValue = defaultOutputValue(action);
-  const hasVanillaOutput = normalizedOutputValue(defaultValue) !== "none";
-  const usesVanillaOutput = hasVanillaOutput && normalizedOutputValue(selectedOutputValue) === normalizedOutputValue(defaultValue);
-  const matchingRows = collisions.byOutput.get(normalizedOutputValue(selectedOutputValue)) ?? [];
-  const duplicateRows = matchingRows.filter((row) => row.id !== action.id);
-  const vanillaRows = (collisions.vanillaByOutput.get(normalizedOutputValue(selectedOutputValue)) ?? [])
-    .filter((row) => row.id !== action.id);
-  const hasCatalogValue = selectedOutputValue === "none" ||
-    outputOptions.some((item) => item.value.toLowerCase() === String(selectedOutputValue).toLowerCase());
-
-  return (
-    <div className="binding-row ship-row">
-      <div>
-        <strong>{action.label}</strong>
-        <span>{action.mode} / plugin output: {outputLabel(output)}</span>
-        <span className={usesVanillaOutput ? "hint" : "notice"}>{outputInstruction(action, selectedOutputValue)}</span>
-        {duplicateRows.length ? (
-          <span className="warning">Also emitted by {duplicateRows.map((row) => row.label).join(", ")}</span>
-        ) : null}
-        {!usesVanillaOutput && vanillaRows.length ? (
-          <span className="warning">Vanilla output for {vanillaRows.map((row) => row.label).join(", ")}</span>
-        ) : null}
-      </div>
-      <select value={control ? control.id : ""} onChange={(event) => onChange(buttonValueChanges(action, controlsFor(device, "button").find((item) => item.id === event.target.value)))}>
-        <option value="">Unbound</option>
-        {controlsFor(device, "button").map((item) => (
-          <option key={controlKey(item)} value={item.id}>{controlLabel(item)}</option>
-        ))}
-      </select>
-      <div className="output-cell">
-        {hasVanillaOutput ? (
-          <Checkbox
-            label="Vanilla output"
-            name={`${action.id}VanillaOutput`}
-            checked={usesVanillaOutput}
-            onChange={(_, checked) => onChange({
-              [action.outputIniKey]: checked ? defaultValue : action.outputs.alt?.value ?? "none"
-            })}
-          />
-        ) : (
-          <span className="output-note">Custom output required</span>
-        )}
-        <select
-          value={selectedOutputValue}
-          onChange={(event) => onChange({ [action.outputIniKey]: event.target.value })}
-          disabled={usesVanillaOutput}
-        >
-          <option value="none">No output</option>
-          {!hasCatalogValue ? <option value={selectedOutputValue}>Current: {selectedOutputValue}</option> : null}
-          {outputOptions.map((item) => (
-            <option key={`${action.id}:${item.value}`} value={item.value}>
-              {item.isDefault ? "Default: " : ""}{item.label}
-            </option>
-          ))}
-        </select>
-      </div>
-      <button type="button" onClick={() => onListen("button", action)} disabled={!device || Boolean(listening)}>
-        {listening === `button:${action.id}` ? "Binding" : "Bind"}
-      </button>
-      <button type="button" onClick={() => onTest(action, output)} disabled={!output}>Test</button>
-    </div>
-  );
-}
-
-function ExtraButtonRow({ row, device, listening, collisions, onChange, onRemove, onListen, onTest }) {
-  const control = selectedControl(device, "button", row.button);
-  const outputAction = { outputs: { main: null, alt: null } };
-  const output = outputFromValue(outputAction, row.output);
-  const selectedOutputValue = output?.value ?? row.output ?? "none";
-  const matchingRows = collisions.byOutput.get(normalizedOutputValue(selectedOutputValue)) ?? [];
-  const duplicateRows = matchingRows.filter((item) => item.id !== row.id);
-  const vanillaRows = collisions.vanillaByOutput.get(normalizedOutputValue(selectedOutputValue)) ?? [];
-  const hasCatalogValue = selectedOutputValue === "none" ||
-    outputCatalog.some((item) => item.value.toLowerCase() === String(selectedOutputValue).toLowerCase());
-
-  return (
-    <div className="binding-row extra-row">
-      <div>
-        <strong>Extra Button</strong>
-        <span>{control ? controlLabel(control) : row.button ? `Button ${row.button}` : "Unbound"} / plugin output: {outputLabel(output)}</span>
-        {duplicateRows.length ? (
-          <span className="warning">Also emitted by {duplicateRows.map((item) => item.label).join(", ")}</span>
-        ) : null}
-        {vanillaRows.length ? (
-          <span className="warning">Vanilla output for {vanillaRows.map((item) => item.label).join(", ")}</span>
-        ) : null}
-      </div>
-      <select value={control ? control.id : ""} onChange={(event) => onChange(extraButtonValueChanges(row, controlsFor(device, "button").find((item) => item.id === event.target.value)))}>
-        <option value="">Unbound</option>
-        {controlsFor(device, "button").map((item) => (
-          <option key={controlKey(item)} value={item.id}>{controlLabel(item)}</option>
-        ))}
-      </select>
-      <select value={selectedOutputValue} onChange={(event) => onChange({ ...row, output: event.target.value })}>
-        <option value="none">No output</option>
-        {!hasCatalogValue ? <option value={selectedOutputValue}>Current: {selectedOutputValue}</option> : null}
-        {outputCatalog.map((item) => (
-          <option key={`${row.id}:${item.value}`} value={item.value}>{item.label}</option>
-        ))}
-      </select>
-      <button type="button" onClick={() => onListen("button", row)} disabled={!device || Boolean(listening)}>
-        {listening === `button:${row.id}` ? "Binding" : "Bind"}
-      </button>
-      <button type="button" onClick={() => onTest(row, output)} disabled={!output}>Test</button>
-      <button type="button" onClick={() => onRemove(row.id)}>Remove</button>
-    </div>
-  );
-}
+const browserCodeToScancode = {
+  Escape: "key:0x01",
+  Digit1: "key:0x02",
+  Digit2: "key:0x03",
+  Digit3: "key:0x04",
+  Digit4: "key:0x05",
+  Digit5: "key:0x06",
+  Digit6: "key:0x07",
+  Digit7: "key:0x08",
+  Digit8: "key:0x09",
+  Digit9: "key:0x0A",
+  Digit0: "key:0x0B",
+  Minus: "key:0x0C",
+  Equal: "key:0x0D",
+  Backspace: "key:0x0E",
+  Tab: "key:0x0F",
+  KeyQ: "key:0x10",
+  KeyW: "key:0x11",
+  KeyE: "key:0x12",
+  KeyR: "key:0x13",
+  KeyT: "key:0x14",
+  KeyY: "key:0x15",
+  KeyU: "key:0x16",
+  KeyI: "key:0x17",
+  KeyO: "key:0x18",
+  KeyP: "key:0x19",
+  BracketLeft: "key:0x1A",
+  BracketRight: "key:0x1B",
+  Enter: "key:0x1C",
+  ControlLeft: "key:0x1D",
+  KeyA: "key:0x1E",
+  KeyS: "key:0x1F",
+  KeyD: "key:0x20",
+  KeyF: "key:0x21",
+  KeyG: "key:0x22",
+  KeyH: "key:0x23",
+  KeyJ: "key:0x24",
+  KeyK: "key:0x25",
+  KeyL: "key:0x26",
+  Semicolon: "key:0x27",
+  Quote: "key:0x28",
+  Backquote: "key:0x29",
+  ShiftLeft: "key:0x2A",
+  Backslash: "key:0x2B",
+  KeyZ: "key:0x2C",
+  KeyX: "key:0x2D",
+  KeyC: "key:0x2E",
+  KeyV: "key:0x2F",
+  KeyB: "key:0x30",
+  KeyN: "key:0x31",
+  KeyM: "key:0x32",
+  Comma: "key:0x33",
+  Period: "key:0x34",
+  Slash: "key:0x35",
+  ShiftRight: "key:0x36",
+  NumpadMultiply: "key:0x37",
+  AltLeft: "key:0x38",
+  Space: "key:0x39",
+  CapsLock: "key:0x3A",
+  F1: "key:0x3B",
+  F2: "key:0x3C",
+  F3: "key:0x3D",
+  F4: "key:0x3E",
+  F5: "key:0x3F",
+  F6: "key:0x40",
+  F7: "key:0x41",
+  F8: "key:0x42",
+  F9: "key:0x43",
+  F10: "key:0x44",
+  NumLock: "key:0x45",
+  ScrollLock: "key:0x46",
+  Numpad7: "key:0x47",
+  ArrowUp: "key:0x48",
+  Numpad9: "key:0x49",
+  NumpadSubtract: "key:0x4A",
+  ArrowLeft: "key:0x4B",
+  Numpad5: "key:0x4C",
+  ArrowRight: "key:0x4D",
+  NumpadAdd: "key:0x4E",
+  Numpad1: "key:0x4F",
+  ArrowDown: "key:0x50",
+  Numpad3: "key:0x51",
+  Numpad0: "key:0x52",
+  NumpadDecimal: "key:0x53",
+  F11: "key:0x57",
+  F12: "key:0x58"
+};
 
 function App() {
   const [config, setConfig] = useState(defaults);
@@ -386,19 +170,177 @@ function App() {
   const vjoyDevice = useMemo(() => inventory.find(isVJoyDevice) ?? null, [inventory]);
   const outputCollisions = useMemo(() => collectOutputCollisions(config), [config]);
 
+  const [controlMapPath, setControlMapPath] = useState("");
+  const outputBindings = useMemo(() => {
+    return Object.fromEntries(
+      shipActions.map((action) => [
+        action.id,
+        config[action.outputIniKey] ?? action.outputs.main?.value ?? "none"
+      ])
+    );
+  }, [config]);
+  const [recordingActionId, setRecordingActionId] = useState(null);
+
   useEffect(() => {
-    invoke("default_ini_path").then(setIniPath).catch((error) => setStatus(String(error)));
+    invoke("default_control_map_path")
+      .then((path) => {
+        if (path) {
+          setControlMapPath(path);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to resolve default ControlMap path:", err);
+      });
+
+    invoke("default_ini_path")
+      .then((path) => {
+        setIniPath(path);
+        if (path) {
+          invoke("read_ini", { path })
+            .then((text) => {
+              setLoadedIni(text);
+              setConfig((current) => ({ ...current, ...parseKnownValues(text) }));
+              setStatus("Loaded existing configuration");
+            })
+            .catch((err) => {
+              const errStr = String(err);
+              if (
+                errStr.includes("entity not found") ||
+                errStr.includes("cannot find the file") ||
+                errStr.includes("No such file")
+              ) {
+                setStatus("Ready (using defaults)");
+              } else {
+                setStatus(`Load failed: ${errStr}`);
+              }
+            });
+        }
+      })
+      .catch((error) => setStatus(String(error)));
     refreshInventory();
   }, []);
+
+  useEffect(() => {
+    if (recordingActionId === null) return;
+
+    const handleKeyDown = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const code = event.code;
+      const scancode = browserCodeToScancode[code];
+      if (scancode) {
+        const action = shipActions.find((item) => item.id === recordingActionId);
+        if (action) {
+          applyChanges({ [action.outputIniKey]: scancode });
+        }
+        setStatus(`Recorded output binding: ${scancode} for ${recordingActionId}`);
+      } else {
+        setStatus(`Unsupported key: ${code}`);
+      }
+      setRecordingActionId(null);
+    };
+
+    const handleMouseDown = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      let outputVal = "none";
+      if (event.button === 0) outputVal = "mouse:1";
+      else if (event.button === 2) outputVal = "mouse:2";
+      else if (event.button === 1) outputVal = "mouse:3";
+      else if (event.button === 3) outputVal = "mouse:4";
+
+      if (outputVal !== "none") {
+        const action = shipActions.find((item) => item.id === recordingActionId);
+        if (action) {
+          applyChanges({ [action.outputIniKey]: outputVal });
+        }
+        setStatus(`Recorded output binding: ${outputVal} for ${recordingActionId}`);
+      }
+      setRecordingActionId(null);
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+    window.addEventListener("mousedown", handleMouseDown, true);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown, true);
+      window.removeEventListener("mousedown", handleMouseDown, true);
+    };
+  }, [recordingActionId]);
 
   function applyChanges(changes) {
     setConfig((current) => ({ ...current, ...changes }));
   }
 
+  function handleHosasModeChange(key, value) {
+    if (key === "bIncrementalThrottleMode" && value === true) {
+      applyChanges({
+        bIncrementalThrottleMode: true,
+        bIncrementalKeyboardMode: false
+      });
+    } else if (key === "bIncrementalKeyboardMode" && value === true) {
+      applyChanges({
+        bIncrementalThrottleMode: false,
+        bIncrementalKeyboardMode: true
+      });
+    } else {
+      applyChanges({ [key]: value });
+    }
+  }
+
+  function handleRecordSecondary(actionId) {
+    if (recordingActionId === actionId) {
+      setRecordingActionId(null);
+    } else {
+      setRecordingActionId(actionId);
+      setStatus(`Press any key or mouse button to set output for ${actionId}...`);
+    }
+  }
+
+  function handleChangeSecondary(actionId, value) {
+    const action = shipActions.find((item) => item.id === actionId);
+    if (!action) return;
+    applyChanges({ [action.outputIniKey]: value });
+  }
+
+  async function browseIniPath() {
+    try {
+      const selected = await invoke("select_file", {
+        filterName: "AbsoluteHOTAS INI",
+        filterExt: "ini",
+        title: "Select AbsoluteHOTAS.ini"
+      });
+      if (selected) {
+        setIniPath(selected);
+        setStatus("Selected AbsoluteHOTAS.ini path");
+      }
+    } catch (error) {
+      setStatus(`Browse failed: ${error}`);
+    }
+  }
+
+  async function browseControlMapPath() {
+    try {
+      const selected = await invoke("select_file", {
+        filterName: "Starfield ControlMap",
+        filterExt: "txt",
+        title: "Select ControlMap_Custom.txt"
+      });
+      if (selected) {
+        setControlMapPath(selected);
+        setStatus("Selected ControlMap_Custom.txt path");
+      }
+    } catch (error) {
+      setStatus(`Browse failed: ${error}`);
+    }
+  }
+
   function updateExtraButton(nextRow) {
     setConfig((current) => ({
       ...current,
-      buttonExpansion: current.buttonExpansion.map((row) => row.id === nextRow.id ? nextRow : row)
+      buttonExpansion: (current.buttonExpansion ?? []).map((row) =>
+        row.id === nextRow.id ? nextRow : row
+      )
     }));
   }
 
@@ -406,7 +348,7 @@ function App() {
     setConfig((current) => ({
       ...current,
       buttonExpansion: [
-        ...current.buttonExpansion,
+        ...(current.buttonExpansion ?? []),
         { id: `extra-${Date.now()}`, button: "", output: "none" }
       ]
     }));
@@ -415,7 +357,7 @@ function App() {
   function removeExtraButton(id) {
     setConfig((current) => ({
       ...current,
-      buttonExpansion: current.buttonExpansion.filter((row) => row.id !== id)
+      buttonExpansion: (current.buttonExpansion ?? []).filter((row) => row.id !== id)
     }));
   }
 
@@ -443,9 +385,68 @@ function App() {
 
   async function saveIni() {
     try {
+      // 1. Write the INI file
       await invoke("write_ini", { path: iniPath, contents: preview });
       setLoadedIni(preview);
-      setStatus("Saved");
+
+      // 2. Generate and write the binary ControlMap_Custom.txt
+      const rawBindings = shipActions
+        .map((action) => {
+          const meta = shipActionMetadata[action.id];
+          if (!meta) return null;
+
+          const defaultOutput = action.outputs.main?.value ?? "none";
+          const secondaryVal = outputBindings[action.id] ?? defaultOutput;
+          const secondaryTokenInfo = outputToStarfieldToken(secondaryVal);
+
+          // Default output uses Starfield's vanilla binding. Custom output must
+          // be reflected into ControlMap_Custom.txt so the emitted key triggers
+          // the same action in game.
+          if (secondaryVal.toLowerCase() === defaultOutput.toLowerCase()) {
+            return null;
+          }
+
+          return {
+            context: meta.context,
+            action: meta.action,
+            secondary_device: secondaryTokenInfo.device,
+            secondary_token: secondaryTokenInfo.token
+          };
+        })
+        .filter(Boolean);
+
+      const cleanBindings = deduplicateBindings(rawBindings);
+      await invoke("write_control_map", { filePath: controlMapPath, bindings: cleanBindings });
+
+      // 3. Update/write StarfieldCustom.ini with the spaceship throttle setting
+      let starfieldIniWritten = false;
+      try {
+        const lastSlash = Math.max(controlMapPath.lastIndexOf('\\'), controlMapPath.lastIndexOf('/'));
+        const starfieldIniPath = lastSlash !== -1
+          ? controlMapPath.substring(0, lastSlash + 1) + 'StarfieldCustom.ini'
+          : 'StarfieldCustom.ini';
+
+        let starfieldIniContent = "";
+        try {
+          starfieldIniContent = await invoke("read_ini", { path: starfieldIniPath });
+        } catch (e) {
+          // File doesn't exist or couldn't be read, which is fine; we will write a new one
+        }
+
+        const updatedIniContent = setIniValue(starfieldIniContent || "", "Spaceship", "fThrottleAtEngineStart", "0.0314");
+        if (updatedIniContent !== starfieldIniContent) {
+          await invoke("write_ini", { path: starfieldIniPath, contents: updatedIniContent });
+          starfieldIniWritten = true;
+        }
+      } catch (err) {
+        console.error("Failed to update StarfieldCustom.ini:", err);
+      }
+
+      if (starfieldIniWritten) {
+        setStatus("Saved INI, ControlMap & StarfieldCustom.ini successfully");
+      } else {
+        setStatus("Saved INI & ControlMap successfully (StarfieldCustom.ini verified)");
+      }
     } catch (error) {
       setStatus(`Save failed: ${error}`);
     }
@@ -534,12 +535,16 @@ function App() {
         </div>
       </header>
 
-      <section className="path-row">
-        <label htmlFor="iniPath">INI path</label>
-        <input id="iniPath" value={iniPath} onChange={(event) => setIniPath(event.target.value)} spellCheck="false" />
-        <button type="button" onClick={loadIni}>Load</button>
-        <button type="button" onClick={saveIni}>Save</button>
-      </section>
+      <PathSettings
+        iniPath={iniPath}
+        setIniPath={setIniPath}
+        controlMapPath={controlMapPath}
+        setControlMapPath={setControlMapPath}
+        browseIniPath={browseIniPath}
+        browseControlMapPath={browseControlMapPath}
+        loadIni={loadIni}
+        saveIni={saveIni}
+      />
 
       <section className={`layout ${previewOpen ? "preview-open" : ""}`}>
         <div className="stack">
@@ -562,31 +567,11 @@ function App() {
             </div>
           </section>
 
-          <section className="panel">
-            <h2>Calibration</h2>
-            <div className="grid four">
-              <Field label="Detent center" name="iDetentCenter" value={config.iDetentCenter} onChange={(key, value) => applyChanges({ [key]: value })} type="number" min="0" max="65535" />
-              <Field label="Detent deadzone" name="iDetentDeadzone" value={config.iDetentDeadzone} onChange={(key, value) => applyChanges({ [key]: value })} type="number" min="0" max="12000" />
-              <Field label="Idle plateau" name="fIdlePlateau" value={config.fIdlePlateau} onChange={(key, value) => applyChanges({ [key]: value })} type="number" min="0" max="0.5" step="0.01" />
-              <Field label="Poll rate" name="iPollRateHz" value={config.iPollRateHz} onChange={(key, value) => applyChanges({ [key]: value })} type="number" min="30" max="500" />
-            </div>
-            <div className="checks">
-              <Checkbox label="Unipolar throttle" name="bUnipolarMode" checked={config.bUnipolarMode} onChange={(key, value) => applyChanges({ [key]: value })} />
-              <Checkbox label="Center-detent throttle reverse" name="bReverseEnabled" checked={config.bReverseEnabled} onChange={(key, value) => applyChanges({ [key]: value })} />
-              <Checkbox label="Logging" name="bLogThrottle" checked={config.bLogThrottle} onChange={(key, value) => applyChanges({ [key]: value })} />
-            </div>
-          </section>
-
-          <section className="panel">
-            <h2>Reverse Slider</h2>
-            <div className="grid four">
-              <Field label="Deadzone" name="fReverseDeadzone" value={config.fReverseDeadzone} onChange={(key, value) => applyChanges({ [key]: value })} type="number" min="0" max="1" step="0.01" />
-              <Field label="Activation threshold" name="fReverseActivationThreshold" value={config.fReverseActivationThreshold} onChange={(key, value) => applyChanges({ [key]: value })} type="number" min="0" max="1" step="0.01" />
-            </div>
-            <div className="checks">
-              <Checkbox label="Enable reverse slider memory injection" name="bReverseAxisEnabled" checked={config.bReverseAxisEnabled} onChange={(key, value) => applyChanges({ [key]: value })} />
-            </div>
-          </section>
+          <HosasSettings
+            config={config}
+            applyChanges={applyChanges}
+            handleHosasModeChange={handleHosasModeChange}
+          />
 
           <section className="panel">
             <h2>Runtime Control</h2>
@@ -621,63 +606,70 @@ function App() {
               ))}
             </div>
             <div className="grid four digital-values">
-              <Field label="Digital roll value" name="fDigitalRollValue" value={config.fDigitalRollValue} onChange={(key, value) => applyChanges({ [key]: value })} type="number" min="0" max="1" step="0.05" />
-              <Field label="Digital strafe value" name="fDigitalStrafeValue" value={config.fDigitalStrafeValue} onChange={(key, value) => applyChanges({ [key]: value })} type="number" min="0" max="1" step="0.05" />
+              <Field
+                label="Digital roll value"
+                name="fDigitalRollValue"
+                value={config.fDigitalRollValue}
+                onChange={(key, value) => applyChanges({ [key]: value })}
+                type="number"
+                min="0"
+                max="1"
+                step="0.05"
+              />
+              <Field
+                label="Digital strafe value"
+                name="fDigitalStrafeValue"
+                value={config.fDigitalStrafeValue}
+                onChange={(key, value) => applyChanges({ [key]: value })}
+                type="number"
+                min="0"
+                max="1"
+                step="0.05"
+              />
             </div>
           </section>
 
-          <section className="panel">
-            <div className="section-header">
-              <h2>Ship Buttons</h2>
-              <Checkbox label="Enabled" name="bShipButtonsEnabled" checked={config.bShipButtonsEnabled} onChange={(key, value) => applyChanges({ [key]: value })} />
-            </div>
-            <div className="binding-list">
-              {shipActions.map((action) => (
-                <ShipActionRow
-                  key={action.id}
-                  action={action}
-                  config={config}
-                  device={vjoyDevice}
-                  listening={listening}
-                  collisions={outputCollisions}
-                  onChange={applyChanges}
-                  onListen={listenFor}
-                  onTest={testShipOutput}
-                />
-              ))}
-            </div>
-          </section>
+          <ShipActionsTable
+            config={config}
+            vjoyDevice={vjoyDevice}
+            listening={listening}
+            outputCollisions={outputCollisions}
+            applyChanges={applyChanges}
+            listenFor={listenFor}
+            testShipOutput={testShipOutput}
+            secondaryBindings={outputBindings}
+            handleChangeSecondary={handleChangeSecondary}
+            recordingActionId={recordingActionId}
+            handleRecordSecondary={handleRecordSecondary}
+          />
 
-          <section className="panel">
-            <div className="section-header">
-              <h2>Extra Buttons</h2>
-              <button type="button" onClick={addExtraButton}>Add</button>
-            </div>
-            <div className="binding-list">
-              {config.buttonExpansion.length === 0 ? (
-                <div className="empty">No extra passthrough buttons configured.</div>
-              ) : config.buttonExpansion.map((row) => (
-                <ExtraButtonRow
-                  key={row.id}
-                  row={row}
-                  device={vjoyDevice}
-                  listening={listening}
-                  collisions={outputCollisions}
-                  onChange={updateExtraButton}
-                  onRemove={removeExtraButton}
-                  onListen={listenFor}
-                  onTest={testExtraOutput}
-                />
-              ))}
-            </div>
-          </section>
+          <ExtraButtons
+            config={config}
+            vjoyDevice={vjoyDevice}
+            listening={listening}
+            outputCollisions={outputCollisions}
+            updateExtraButton={updateExtraButton}
+            addExtraButton={addExtraButton}
+            removeExtraButton={removeExtraButton}
+            listenFor={listenFor}
+            testExtraOutput={testExtraOutput}
+          />
         </div>
 
         {previewOpen ? (
           <aside className="panel preview-panel">
             <div className="preview-header">
               <h2>INI Preview</h2>
-              <button type="button" onClick={() => { setLoadedIni(""); setConfig(defaults); setStatus("Defaults restored"); }}>Defaults</button>
+              <button
+                type="button"
+                onClick={() => {
+                  setLoadedIni("");
+                  setConfig(defaults);
+                  setStatus("Defaults restored");
+                }}
+              >
+                Defaults
+              </button>
             </div>
             <textarea value={preview} readOnly spellCheck="false" />
           </aside>

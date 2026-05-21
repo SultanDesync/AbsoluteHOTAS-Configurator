@@ -1,4 +1,4 @@
-import { defaultShipBindings, defaultShipOutputs } from "./shipActions";
+import { defaultShipBindings, defaultShipOutputs, shipActions } from "./shipActions";
 
 export const axisRows = [
   { title: "Throttle", axis: "iThrottleAxis", invert: "bInvertThrottle" },
@@ -47,6 +47,7 @@ export const defaults = {
   iThrottleBurstMs: "250",
   bLogThrottle: false,
   bReverseAxisEnabled: true,
+  bAlwaysOn: false,
   iActivateButtonId: "69",
   iStopButtonId: "70",
   iBoostButtonId: "-1",
@@ -59,6 +60,9 @@ export const defaults = {
   iDigitalStrafeDownButton: "-1",
   fDigitalRollValue: "1.0",
   fDigitalStrafeValue: "1.0",
+  bIncrementalThrottleMode: false,
+  fThrottleRampRate: "0.67",
+  bIncrementalKeyboardMode: false,
   bShipButtonsEnabled: true,
   buttonExpansion: [],
   ...defaultShipBindings(),
@@ -68,8 +72,8 @@ export const defaults = {
 export const sections = {
   Hardware: ["sDeviceName", "iVJoyDeviceId", "iThrottleAxis", "iPitchAxis", "iYawAxis", "iRollAxis", "iStrafeLatAxis", "iStrafeVertAxis", "iReverseAxis", "fPitchSensitivity", "fYawSensitivity", "fRollSensitivity", "fStrafeSensitivity", "fReverseSensitivity", "bInvertPitch", "bInvertThrottle", "bInvertYaw", "bInvertRoll", "bInvertStrafeLat", "bInvertStrafeVert", "bInvertReverse"],
   InputDevices: ["sAxisDeviceName", "iAxisDeviceIndex", "sShipButtonDeviceName", "iShipButtonDeviceIndex"],
-  Buttons: ["iActivateButtonId", "iStopButtonId", "iBoostButtonId"],
-  Normalization: ["iDetentCenter", "iDetentDeadzone", "bReverseEnabled", "bUnipolarMode", "fIdlePlateau", "fReverseDeadzone", "fReverseActivationThreshold"],
+  Buttons: ["bAlwaysOn", "iActivateButtonId", "iStopButtonId", "iBoostButtonId"],
+  Normalization: ["iDetentCenter", "iDetentDeadzone", "bReverseEnabled", "bUnipolarMode", "fIdlePlateau", "fReverseDeadzone", "fReverseActivationThreshold", "bIncrementalThrottleMode", "fThrottleRampRate", "bIncrementalKeyboardMode"],
   Injection: ["iPollRateHz", "iThrottleBurstMs", "bLogThrottle", "bReverseAxisEnabled"],
   DigitalAxes: ["iDigitalReverseButton", "iDigitalRollLeftButton", "iDigitalRollRightButton", "iDigitalStrafeLeftButton", "iDigitalStrafeRightButton", "iDigitalStrafeUpButton", "iDigitalStrafeDownButton", "fDigitalRollValue", "fDigitalStrafeValue"],
   ShipButtons: ["bShipButtonsEnabled", ...Object.keys(defaultShipBindings())],
@@ -86,8 +90,26 @@ export function parseKnownValues(text) {
         : match[2];
     }
   }
+  migrateLegacySecondaryOutputs(text, data);
   data.buttonExpansion = parseButtonExpansion(text);
   return data;
+}
+
+function migrateLegacySecondaryOutputs(text, data) {
+  for (const action of shipActions) {
+    const legacyKey = `s${action.id}Secondary`;
+    const match = text.match(new RegExp(`^\\s*${legacyKey}\\s*=\\s*(.*?)\\s*$`, "im"));
+    if (!match) continue;
+
+    const legacyOutput = match[1].trim();
+    if (!legacyOutput || legacyOutput.toLowerCase() === "none") continue;
+
+    const currentOutput = String(data[action.outputIniKey] ?? defaults[action.outputIniKey] ?? "none");
+    const defaultOutput = String(action.outputs.main?.value ?? "none");
+    if (currentOutput.toLowerCase() === defaultOutput.toLowerCase()) {
+      data[action.outputIniKey] = legacyOutput;
+    }
+  }
 }
 
 function parseButtonExpansion(text) {
@@ -128,7 +150,7 @@ function valueText(value) {
   return typeof value === "boolean" ? boolText(value) : String(value);
 }
 
-function setIniValue(text, section, key, value) {
+export function setIniValue(text, section, key, value) {
   const lines = text.split(/\r?\n/);
   const sectionPattern = new RegExp(`^\\s*\\[${section}\\]\\s*$`, "i");
   const anySectionPattern = /^\s*\[[^\]]+\]\s*$/;
@@ -205,6 +227,7 @@ fSignpostTolerance = 0.0025
 `;
 
   text = removeIniSection(removeIniSection(removeIniSection(text, "AxisSources"), "ButtonSources"), "ButtonExpansion");
+  text = removeLegacySecondaryOutputLines(text);
   for (const [section, keys] of Object.entries(sections)) {
     for (const key of keys) {
       text = setIniValue(text, section, key, data[key]);
@@ -212,6 +235,17 @@ fSignpostTolerance = 0.0025
   }
   text = writeButtonExpansion(text, data.buttonExpansion);
   return text.trimEnd() + "\n";
+}
+
+function removeLegacySecondaryOutputLines(text) {
+  const legacyKeys = new Set(shipActions.map((action) => `s${action.id}Secondary`.toLowerCase()));
+  return text
+    .split(/\r?\n/)
+    .filter((line) => {
+      const match = line.match(/^\s*([A-Za-z][A-Za-z0-9_]*)\s*=/);
+      return !match || !legacyKeys.has(match[1].toLowerCase());
+    })
+    .join("\n");
 }
 
 function writeButtonExpansion(text, rows = []) {

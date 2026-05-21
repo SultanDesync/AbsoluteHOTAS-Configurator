@@ -107,12 +107,31 @@ h2 {
 }
 
 .path-row {
-  display: grid;
-  grid-template-columns: auto minmax(240px, 1fr) 92px 92px;
-  gap: 10px;
-  align-items: center;
-  padding: 11px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
   margin-bottom: 12px;
+}
+
+.path-group {
+  display: grid;
+  grid-template-columns: 130px 1fr 100px;
+  align-items: center;
+  gap: 10px;
+}
+
+.path-group label {
+  font-weight: 550;
+  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+}
+
+.path-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 .layout {
@@ -287,7 +306,7 @@ button:disabled {
 }
 
 .ship-row {
-  grid-template-columns: minmax(260px, 1fr) minmax(210px, 0.72fr) minmax(170px, 0.48fr) 92px 78px;
+  grid-template-columns: minmax(240px, 1.2fr) minmax(180px, 0.9fr) minmax(220px, 1fr) 92px 78px;
 }
 
 .extra-row {
@@ -326,6 +345,205 @@ button:disabled {
   min-height: 18px;
 }
 
+/* Premium Visual Pipeline Architecture */
+.table-header {
+  background: #0d1a1e !important;
+  border-bottom: 2px solid #005a6e !important;
+  border-radius: 4px 4px 0 0;
+  margin-bottom: 6px;
+  align-items: center !important;
+  min-height: auto !important;
+  padding: 10px 14px !important;
+}
+
+.header-cell {
+  font-weight: bold;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.75px;
+  color: #00d2f3;
+  opacity: 0.9;
+}
+
+.pipeline-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 550;
+  margin-top: 6px;
+  border: 1px solid transparent;
+  width: fit-content;
+}
+
+.pipeline-badge.active {
+  background: rgba(0, 229, 255, 0.06);
+  border-color: rgba(0, 229, 255, 0.2);
+  color: #00e5ff;
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.06);
+}
+
+.pipeline-badge.inactive {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #929d9e;
+}
+
+.pipeline-badge .icon {
+  font-size: 12px;
+}
+
+.pipeline-badge .arrow {
+  opacity: 0.5;
+  margin: 0 2px;
+  font-weight: bold;
+}
+
+.pipeline-badge .badge-text {
+  margin: 0 !important;
+  display: inline !important;
+}
+
+.text-custom {
+  color: #00d2f3 !important;
+  font-weight: 550;
+}
+
+.text-bypass {
+  color: #f2d28b !important;
+  font-weight: 550;
+}
+
+/* Glassmorphic Pipeline Guide Card */
+.pipeline-guide-card {
+  background: linear-gradient(135deg, rgba(17, 31, 36, 0.95), rgba(8, 28, 34, 0.95));
+  border: 1px solid #005f73;
+  border-radius: 4px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+  position: relative;
+  overflow: hidden;
+}
+
+.pipeline-guide-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background: linear-gradient(180deg, #00d2f3, #00758e);
+}
+
+.pipeline-guide-card h3 {
+  margin: 0 0 12px;
+  color: #fbffff;
+  font-size: 16px;
+  font-weight: 550;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.pipeline-guide-card p {
+  margin: 0 0 16px;
+  color: #b3c0c2;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.pipeline-flow-diagram {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 18px 0;
+  background: rgba(0, 0, 0, 0.15);
+  padding: 14px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 117, 142, 0.15);
+}
+
+.flow-step {
+  flex: 1;
+  text-align: center;
+  background: #09171b;
+  border: 1px solid #14272e;
+  border-radius: 4px;
+  padding: 12px;
+  min-height: 94px;
+}
+
+.flow-step p {
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.35;
+  color: #929d9e;
+}
+
+.step-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.step-badge.icon-vjoy {
+  background: rgba(0, 149, 181, 0.15);
+  color: #00d2f3;
+  border: 1px solid rgba(0, 149, 181, 0.3);
+}
+
+.step-badge.icon-emulated {
+  background: rgba(184, 214, 218, 0.1);
+  color: #fbffff;
+  border: 1px solid rgba(184, 214, 218, 0.2);
+}
+
+.step-badge.icon-game {
+  background: rgba(242, 210, 139, 0.1);
+  color: #f2d28b;
+  border: 1px solid rgba(242, 210, 139, 0.2);
+}
+
+.flow-arrow {
+  font-size: 20px;
+  color: #00758e;
+  font-weight: bold;
+  user-select: none;
+}
+
+.pipeline-note-box {
+  background: rgba(0, 117, 142, 0.08);
+  border: 1px dashed rgba(0, 210, 243, 0.25);
+  border-radius: 4px;
+  padding: 10px 14px;
+}
+
+.pipeline-note-box p {
+  margin: 0;
+  font-size: 12px;
+  color: #c7d5d6;
+}
+
+.guide-toggle-btn {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  text-transform: uppercase;
+  font-weight: 550;
+  cursor: pointer;
+}
+
+.guide-toggle-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(0, 181, 217, 0.25);
+  border-color: #00b5d9 !important;
+}
+
 .preview-panel {
   position: sticky;
   top: 18px;
@@ -346,6 +564,7 @@ textarea {
 @media (max-width: 1220px) {
   .layout.preview-open,
   .path-row,
+  .path-group,
   .grid.four,
   .binding-row,
   .runtime-row,
