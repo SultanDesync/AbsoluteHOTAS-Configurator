@@ -10,6 +10,7 @@ Designed explicitly for the AbsoluteHOTAS input mod, this configurator allows yo
 
 ### 🛠️ Configurator Core
 - **Load & Save `AbsoluteHOTAS.ini`**: Full support for hardware, buttons, normalization, injection, and ship-button configurations.
+- **💾 Profile Backups & Management**: Create separate backup profiles (`.ini`) and load them dynamically using native file browser dialogs to swap control schemes instantly.
 - **Native DirectInput Scanning**: Arms a noise-resilient recording thread to listen for your next vJoy joystick button press or deliberate analog axis deflection.
 - **Visual INI Preview**: Built-in side drawer lets you inspect the raw INI content generated in real-time.
 
@@ -24,6 +25,7 @@ Designed explicitly for the AbsoluteHOTAS input mod, this configurator allows yo
 
 ### 🛰️ Ship Controls & Output Bindings
 - **Full Ship Action Matrix**: Map 23 named spaceship events (Boosters, weapons, system power allocation, etc.) to your joystick buttons.
+- **⚡ Auto-Map Unused Keys**: Decouple ship controls from on-foot controls with a single click. Assigns 23 completely unique, safe secondary keyboard keys (such as `Numpad 7`, `[`, `;`, etc.) to prevent double-binding conflicts.
 - **Output Recording**: Keep the vanilla Starfield output as `Default`, or record a keyboard/mouse output that replaces the vanilla SendInput binding in `AbsoluteHOTAS.ini`.
 - **Duplicate & Collision Alerts**: Warns you instantly in real-time if a chosen scancode or button is already bound elsewhere or conflicts with a vanilla preset.
 
@@ -33,6 +35,7 @@ Designed explicitly for the AbsoluteHOTAS input mod, this configurator allows yo
 
 ### 💾 Binary ControlMap Synchronization
 - **Direct Custom Patching**: Reads, parses, structurally merges, and writes your output bindings directly to Starfield's custom binary mapping file: `ControlMap_Custom.txt`.
+- **Secondary-Only Override Patching**: Writes *only* the custom secondary records (`Flags: 0x02 0x00`) to preserve Starfield's default layout database in the primary column (ensuring vanilla keyboard controls like `Space`, `Q`, `E` never get unbound).
 - **Automatic Backups**: Generates a `.bak` backup file on every save to ensure you never lose your previous configurations.
 - **Deduplication Engine**: Backend logic strips duplicate mappings within identical contexts to prevent desyncs during spaceflight.
 
@@ -67,13 +70,15 @@ graph TD
 
 ## Binding Workflow
 
-1. **Load Configuration**: Choose your `AbsoluteHOTAS.ini` and `ControlMap_Custom.txt` using the native file browser dials, and click **Load**.
+1. **Load Configuration**: Choose your active `AbsoluteHOTAS.ini` and `ControlMap_Custom.txt` using the native file browser dials, and click **Load**.
 2. **Device Connection**: Confirm that the vJoy summary panel successfully displays your active DirectInput channel.
-3. **Capture Inputs**: 
+3. **Manage Profiles (Optional)**: Click **Create Backup Profile** to save your current configuration under a separate backup profile, or **Load Backup Profile** to quickly restore a previously saved control scheme.
+4. **⚡ Auto-Map (Recommended)**: Click **⚡ Auto-Map Unused Keys** and confirm the modal to instantly decouple flight bindings from on-foot controls using 23 safe, conflict-free secondary keyboard hotkeys.
+5. **Capture Inputs**: 
    - Choose a known control from the axis/button dropdowns, or click **Bind**.
    - Deflect your analog axis or tap a button to bind it in real-time.
-4. **Set Up Outputs**: Toggle vanilla presets, define key scancodes, or click **Rec** to record secondary keyboard/mouse inputs.
-5. **Deduplicate & Save**: Click **Save** to write the INI, generate a `.bak` copy of your control map, and structurally serialize your bindings to Starfield!
+6. **Set Up Outputs**: Toggle vanilla presets, define key scancodes, or click **Rec** to record secondary keyboard/mouse inputs.
+7. **Deduplicate & Save**: Click **Save Config** to write the active INI, generate a `.bak` copy of your control map, and structurally serialize your bindings to Starfield's custom layout database!
 
 ---
 
